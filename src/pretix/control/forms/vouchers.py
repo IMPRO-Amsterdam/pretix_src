@@ -53,7 +53,7 @@ from pretix.control.forms.widgets import Select2, Select2ItemVarQuota
 from pretix.control.signals import voucher_form_validation
 from pretix.helpers.models import modelcopy
 
-from src.pretix.base.models import ItemCategory
+from pretix.base.models import ItemCategory
 
 
 class FakeChoiceField(forms.ChoiceField):
