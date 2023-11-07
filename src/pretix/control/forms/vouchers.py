@@ -97,7 +97,8 @@ class VoucherForm(I18nModelForm):
         initial_categories = []
 
         if instance:
-            initial_categories = instance.applicable_to.all() if instance else ItemCategory.objects.none()
+            if instance.id:
+                initial_categories = instance.applicable_to.all() if instance else ItemCategory.objects.none()
 
             self.initial_instance_data = modelcopy(instance)
             try:
@@ -262,7 +263,7 @@ class VoucherForm(I18nModelForm):
         return data
 
     def save(self, commit=True):
-        voucher = super().save(commit=False)
+        voucher = super().save(commit)
         if commit:
             voucher.applicable_to.clear()
         # Add selected categories
