@@ -305,12 +305,19 @@ class Voucher(LoggedModel):
         default=False
     )
 
-    applicable_to = models.ManyToManyField(
+    applicable_to_categories = models.ManyToManyField(
         ItemCategory,
         blank=True,
         null=True,
         help_text=_("Select items categories to which this voucher should be applicable. "
                     "\n Default: ALL categories and items")
+    )
+    applicable_to_items = models.ManyToManyField(
+        Item,
+        blank=True,
+        null=True,
+        help_text=_("Select items  to which this voucher should be applicable. "
+                    "\n Default: ALL items. NOTE: this takes precision over categories")
     )
     objects = ScopedManager(organizer='event__organizer')
 
@@ -575,8 +582,11 @@ class Voucher(LoggedModel):
         original price will be returned.
         """
         if self.value is not None:
-            if self.applicable_to.exists() and item is not None:
-                if not self.applicable_to.filter(id=item.category.id).exists():
+            if self.applicable_to_items.exists() and item is not None:
+                if not self.applicable_to_items.filter(id=item.id).exists():
+                    return original_price
+            elif self.applicable_to_categories.exists() and item is not None:
+                if not self.applicable_to_categories.filter(id=item.category.id).exists():
                     return original_price
 
             if not isinstance(self.value, Decimal):
