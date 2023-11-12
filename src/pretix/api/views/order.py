@@ -766,10 +766,10 @@ class EventOrderViewSet(OrderViewSetMixin, viewsets.ModelViewSet):
                     email_attendees_template = request.event.settings.mail_text_order_placed_attendee
                     subject_attendees_template = request.event.settings.mail_subject_order_placed_attendee
 
-                _order_placed_email(
-                    request.event, order, email_template, subject_template,
-                    log_entry, invoice, [payment] if payment else [], is_free=free_flow
-                )
+                #_order_placed_email(
+                #    request.event, order, email_template, subject_template,
+                #    log_entry, invoice, [payment] if payment else [], is_free=free_flow
+                #)
                 if email_attendees:
                     for p in order.positions.all():
                         if p.addon_to_id is None and p.attendee_email and p.attendee_email != order.email:
