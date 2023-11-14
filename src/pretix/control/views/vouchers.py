@@ -77,6 +77,10 @@ from pretix.helpers.format import format_map
 from pretix.helpers.models import modelcopy
 from pretix.multidomain.urlreverse import build_absolute_uri
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class VoucherList(PaginationMixin, EventPermissionRequiredMixin, ListView):
     model = Voucher
@@ -502,6 +506,16 @@ class VoucherBulkCreate(EventPermissionRequiredMixin, AsyncFormView):
             batch_vouchers.append(obj)
 
         process_batch(batch_vouchers, voucherids)
+
+        for v_id in voucherids:
+            logger.info(f"Processing new voucher {v_id}")
+            voucher = Voucher.objects.get(v_id)
+            for category in form.instance.applicable_to_categories.all():
+                logger.info(f"Adding applicable category '{category}' to voucher '{voucher}'")
+                voucher.applicable_to_categories.add(category.id)
+            for item in form.instance.applicable_to_items.all():
+                logger.info(f"Adding applicable item '{item}' to voucher '{voucher}'")
+                voucher.applicable_to_items.add(item.id)
 
         if form.cleaned_data['send']:
             vouchers_send(
