@@ -747,7 +747,7 @@ class CartManager:
 
             listed_price = get_listed_price(item, variation, subevent)
             if voucher:
-                price_after_voucher = voucher.calculate_price(listed_price)
+                price_after_voucher = voucher.calculate_price(listed_price, item=item)
             else:
                 price_after_voucher = listed_price
             custom_price = None

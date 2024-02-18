@@ -80,6 +80,8 @@ try:
 except:
     widget_data_cache = caches['default']
 
+import logging
+logger = logging.getLogger(__name__)
 
 class CartActionMixin:
 
@@ -210,6 +212,8 @@ class CartActionMixin:
                 }
             except ValueError:
                 raise CartError(_('Please enter numbers only.'))
+            except Exception as e:
+                logger.error("")
 
     def _items_from_post_data(self):
         """

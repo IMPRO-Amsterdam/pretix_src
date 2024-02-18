@@ -54,7 +54,9 @@ from .base import LoggedModel
 from .event import Event, SubEvent
 from .items import Item, ItemVariation, Quota, ItemCategory
 from .orders import Order, OrderPosition
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _generate_random_code(prefix=None):
     charset = list('ABCDEFGHKLMNPQRSTUVWXYZ23456789')
@@ -582,11 +584,28 @@ class Voucher(LoggedModel):
         original price will be returned.
         """
         if self.value is not None:
-            if self.applicable_to_items.exists() and item is not None:
-                if not self.applicable_to_items.filter(id=item.id).exists():
+            if item is None:
+                return original_price
+            if isinstance(item, ItemVariation):
+                item_category_name = str(item.item.category)
+            else:
+                item_category_name = str(item.category.name)
+            if item_category_name.lower().startswith("merch") or item_category_name.lower().startswith("paint"):
+                logger.error("!!!!!!! RETURNING ORIGINAL PRICE 1")
+                return original_price
+            if "show" in item_category_name.lower() and "VOLUNTEERS" in self.code.upper():
+                logger.error("!!!!!!! RETURNING ORIGINAL PRICE 2")
+                return original_price
+            actual_item = item
+            if isinstance(item, ItemVariation):
+                actual_item = item.item
+            if self.applicable_to_items.exists():
+                if not self.applicable_to_items.filter(id=actual_item.id).exists():
+                    logger.error("!!!!!!! RETURNING ORIGINAL PRICE 3")
                     return original_price
-            elif self.applicable_to_categories.exists() and item is not None:
-                if not self.applicable_to_categories.filter(id=item.category.id).exists():
+            elif self.applicable_to_categories.exists() and actual_item.category is not None:
+                if not self.applicable_to_categories.filter(id=actual_item.category.id).exists():
+                    logger.error("!!!!!!! RETURNING ORIGINAL PRICE 4")
                     return original_price
 
             if not isinstance(self.value, Decimal):

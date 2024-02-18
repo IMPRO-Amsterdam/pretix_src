@@ -1832,7 +1832,7 @@ class OrderPayment(models.Model):
                     trigger_pdf=not send_mail or not self.order.event.settings.invoice_email_attachment
                 )
 
-        if send_mail and self.order.sales_channel in self.order.event.settings.mail_sales_channel_placed_paid:
+        if True: #send_mail and self.order.sales_channel in self.order.event.settings.mail_sales_channel_placed_paid:
             self._send_paid_mail(invoice, user, mail_text)
             if self.order.event.settings.mail_send_order_paid_attendee:
                 for p in self.order.positions.all():
@@ -2905,7 +2905,7 @@ class CartPosition(AbstractPosition):
                 listed_price = get_listed_price(self.item, self.variation, self.subevent)
 
         if self.voucher:
-            price_after_voucher = self.voucher.calculate_price(listed_price, max_discount)
+            price_after_voucher = self.voucher.calculate_price(listed_price, max_discount, item=self.item)
         else:
             price_after_voucher = listed_price
 

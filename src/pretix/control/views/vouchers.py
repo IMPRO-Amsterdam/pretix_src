@@ -64,7 +64,7 @@ from pretix.base.models import (
     CartPosition, LogEntry, Voucher, WaitingListEntry,
 )
 from pretix.base.models.vouchers import generate_codes
-from pretix.base.services.vouchers import vouchers_send
+from pretix.base.services.vouchers import vouchers_send, update_vouchers_applicable
 from pretix.base.templatetags.rich_text import markdown_compile_email
 from pretix.base.views.tasks import AsyncFormView
 from pretix.control.forms.filter import VoucherFilterForm, VoucherTagFilterForm
@@ -506,17 +506,8 @@ class VoucherBulkCreate(EventPermissionRequiredMixin, AsyncFormView):
             batch_vouchers.append(obj)
 
         process_batch(batch_vouchers, voucherids)
-
-        for v_id in voucherids:
-            logger.info(f"Processing new voucher {v_id}")
-            voucher = Voucher.objects.get(v_id)
-            for category in form.instance.applicable_to_categories.all():
-                logger.info(f"Adding applicable category '{category}' to voucher '{voucher}'")
-                voucher.applicable_to_categories.add(category.id)
-            for item in form.instance.applicable_to_items.all():
-                logger.info(f"Adding applicable item '{item}' to voucher '{voucher}'")
-                voucher.applicable_to_items.add(item.id)
-
+        if self.copy_from:
+            update_vouchers_applicable(self.copy_from.id, voucherids)
         if form.cleaned_data['send']:
             vouchers_send(
                 event=self.request.event,

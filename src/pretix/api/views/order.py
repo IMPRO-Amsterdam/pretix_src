@@ -777,7 +777,7 @@ class EventOrderViewSet(OrderViewSetMixin, viewsets.ModelViewSet):
                                                          log_entry, is_free=free_flow)
 
 
-                if not free_flow and order.status == Order.STATUS_PAID and payment:
+                if True: #not free_flow and order.status == Order.STATUS_PAID and payment:
                     payment._send_paid_mail(invoice, None, '')
                     if self.request.event.settings.mail_send_order_paid_attendee:
                         for p in order.positions.all():

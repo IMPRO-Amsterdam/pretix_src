@@ -382,6 +382,8 @@ class PdfDataSerializer(serializers.Field):
                 else:
                     try:
                         res[k] = f['evaluate'](instance, instance.order, ev)
+                        if k == 'item_description':
+                            res[k] = res[k].replace("*", "").replace("*", "").strip()
                     except:
                         logger.exception('Evaluating PDF variable failed')
                         res[k] = '(error)'
