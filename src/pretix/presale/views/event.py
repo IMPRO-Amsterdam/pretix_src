@@ -334,7 +334,7 @@ def get_grouped_items(event, subevent=None, voucher=None, channel='web', require
 
             original_price = item_price_override.get(item.pk, item.default_price)
             if voucher:
-                price = voucher.calculate_price(original_price)
+                price = voucher.calculate_price(original_price, item=item)
                 include_bundled = not voucher.all_bundles_included
             else:
                 price = original_price
@@ -385,7 +385,7 @@ def get_grouped_items(event, subevent=None, voucher=None, channel='web', require
 
                 original_price = var_price_override.get(var.pk, var.price)
                 if voucher:
-                    price = voucher.calculate_price(original_price)
+                    price = voucher.calculate_price(original_price, item=var)
                     include_bundled = not voucher.all_bundles_included
                 else:
                     price = original_price

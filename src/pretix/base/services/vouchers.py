@@ -26,6 +26,9 @@ from pretix.base.email import get_email_context
 from pretix.base.i18n import language
 from pretix.base.models import Event, LogEntry, User, Voucher
 from pretix.base.services.mail import mail
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def vouchers_send(event: Event, vouchers: list, subject: str, message: str, recipients: list, user: int,
@@ -70,3 +73,19 @@ def vouchers_send(event: Event, vouchers: list, subject: str, message: str, reci
 
             if progress and ir % 50 == 0:
                 progress(ir / len(recipients))
+
+                progress(ir / len(recipients))
+
+
+def update_vouchers_applicable(original_voucher_id, vouchers: list):
+    vouchers = list(Voucher.objects.filter(id__in=vouchers).order_by('id'))
+    original_voucher = Voucher.objects.get(id=original_voucher_id)
+    for voucher in vouchers:
+        logger.error(f"Processing new voucher {voucher}")
+        for category in list(original_voucher.applicable_to_categories.all()):
+            logger.error(f"Adding applicable category '{category}' to voucher '{voucher}'")
+            voucher.applicable_to_categories.add(category.id)
+        for item in list(original_voucher.applicable_to_items.all()):
+            logger.error(f"Adding applicable item '{item}' to voucher '{voucher}'")
+            voucher.applicable_to_items.add(item.id)
+        voucher.save()

@@ -64,7 +64,7 @@ from pretix.base.models import (
     CartPosition, LogEntry, Voucher, WaitingListEntry,
 )
 from pretix.base.models.vouchers import generate_codes
-from pretix.base.services.vouchers import vouchers_send
+from pretix.base.services.vouchers import vouchers_send, update_vouchers_applicable
 from pretix.base.templatetags.rich_text import markdown_compile_email
 from pretix.base.views.tasks import AsyncFormView
 from pretix.control.forms.filter import VoucherFilterForm, VoucherTagFilterForm
@@ -76,6 +76,10 @@ from pretix.helpers.compat import CompatDeleteView
 from pretix.helpers.format import format_map
 from pretix.helpers.models import modelcopy
 from pretix.multidomain.urlreverse import build_absolute_uri
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class VoucherList(PaginationMixin, EventPermissionRequiredMixin, ListView):
@@ -502,7 +506,8 @@ class VoucherBulkCreate(EventPermissionRequiredMixin, AsyncFormView):
             batch_vouchers.append(obj)
 
         process_batch(batch_vouchers, voucherids)
-
+        if self.copy_from:
+            update_vouchers_applicable(self.copy_from.id, voucherids)
         if form.cleaned_data['send']:
             vouchers_send(
                 event=self.request.event,

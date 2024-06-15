@@ -1245,8 +1245,8 @@ def _perform_order(event: Event, payment_requests: List[dict], position_ids: Lis
             subject_attendees_template = event.settings.mail_subject_order_placed_attendee
 
         if sales_channel in event.settings.mail_sales_channel_placed_paid:
-            _order_placed_email(event, order, email_template, subject_template, log_entry, invoice, payment_objs,
-                                is_free=free_order_flow)
+            #_order_placed_email(event, order, email_template, subject_template, log_entry, invoice, payment_objs,
+            #                   is_free=free_order_flow)
             if email_attendees:
                 for p in order.positions.all():
                     if p.addon_to_id is None and p.attendee_email and p.attendee_email != order.email:
@@ -2174,9 +2174,13 @@ class OrderChangeManager:
                 if op.position.voucher_budget_use is not None and op.position.voucher and not op.position.addon_to_id:
                     listed_price = get_listed_price(op.position.item, op.position.variation, op.position.subevent)
                     if not op.position.item.tax_rule or op.position.item.tax_rule.price_includes_tax:
-                        price_after_voucher = max(op.position.price, op.position.voucher.calculate_price(listed_price))
+                        price_after_voucher = max(op.position.price,
+                                                  op.position.voucher.calculate_price(listed_price,
+                                                                                      item=op.position.item))
                     else:
-                        price_after_voucher = max(op.position.price - op.position.tax_value, op.position.voucher.calculate_price(listed_price))
+                        price_after_voucher = max(op.position.price - op.position.tax_value,
+                                                  op.position.voucher.calculate_price(listed_price,
+                                                                                      item=op.position.item))
                     op.position.voucher_budget_use = max(listed_price - price_after_voucher, Decimal('0.00'))
                 secret_dirty.add(op.position)
                 op.position.save()
@@ -2215,9 +2219,13 @@ class OrderChangeManager:
                 if op.position.voucher_budget_use is not None and op.position.voucher and not op.position.addon_to_id:
                     listed_price = get_listed_price(op.position.item, op.position.variation, op.position.subevent)
                     if not op.position.item.tax_rule or op.position.item.tax_rule.price_includes_tax:
-                        price_after_voucher = max(op.position.price, op.position.voucher.calculate_price(listed_price))
+                        price_after_voucher = max(op.position.price,
+                                                  op.position.voucher.calculate_price(listed_price,
+                                                                                      item=op.position.item))
                     else:
-                        price_after_voucher = max(op.position.price - op.position.tax_value, op.position.voucher.calculate_price(listed_price))
+                        price_after_voucher = max(op.position.price - op.position.tax_value,
+                                                  op.position.voucher.calculate_price(listed_price,
+                                                                                      item=op.position.item))
                     op.position.voucher_budget_use = max(listed_price - price_after_voucher, Decimal('0.00'))
                 op.position.save()
             elif isinstance(op, self.AddFeeOperation):

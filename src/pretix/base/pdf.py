@@ -86,10 +86,25 @@ from pretix.base.templatetags.phone_format import phone_format
 from pretix.helpers.reportlab import ThumbnailingImageReader, reshaper
 from pretix.presale.style import get_fonts
 
+import markdown
+
 logger = logging.getLogger(__name__)
 
 if not settings.DEBUG:
     reportlab.rl_config.shapeChecking = 0
+
+
+def transform_string(input_str):
+    input_str = str(input_str)
+    transformed_str = '\n'.join([
+        line.replace('#', '').replace('*', '').strip() if 'http' not in line and '[TBA]' not in line
+        else (
+                 'Teacher: ' if 'Teacher:' in line else 'Teachers: ' if 'Teachers:' in line else 'Location: ' if 'Location:' in line else '') +
+             line.split('[')[1].split(']')[0] if 'http' in line
+        else line.replace('[TBA]()', 'TBA')
+        for line in input_str.split('\n')
+    ])
+    return transformed_str
 
 
 DEFAULT_VARIABLES = OrderedDict((
@@ -131,7 +146,7 @@ DEFAULT_VARIABLES = OrderedDict((
     ("item_description", {
         "label": _("Product description"),
         "editor_sample": _("Sample product description"),
-        "evaluate": lambda orderposition, order, event: str(orderposition.item.description)
+        "evaluate": lambda orderposition, order, event: transform_string(orderposition.item.description)
     }),
     ("itemvar", {
         "label": _("Product name and variation"),
@@ -335,17 +350,20 @@ DEFAULT_VARIABLES = OrderedDict((
     ("invoice_company", {
         "label": _("Invoice address company"),
         "editor_sample": _("Sample company"),
-        "evaluate": lambda op, order, ev: order.invoice_address.company if getattr(order, 'invoice_address', None) else ''
+        "evaluate": lambda op, order, ev: order.invoice_address.company if getattr(order, 'invoice_address',
+                                                                                   None) else ''
     }),
     ("invoice_street", {
         "label": _("Invoice address street"),
         "editor_sample": _("Sesame Street 42"),
-        "evaluate": lambda op, order, ev: order.invoice_address.street if getattr(order, 'invoice_address', None) else ''
+        "evaluate": lambda op, order, ev: order.invoice_address.street if getattr(order, 'invoice_address',
+                                                                                  None) else ''
     }),
     ("invoice_zipcode", {
         "label": _("Invoice address ZIP code"),
         "editor_sample": _("12345"),
-        "evaluate": lambda op, order, ev: order.invoice_address.zipcode if getattr(order, 'invoice_address', None) else ''
+        "evaluate": lambda op, order, ev: order.invoice_address.zipcode if getattr(order, 'invoice_address',
+                                                                                   None) else ''
     }),
     ("invoice_city", {
         "label": _("Invoice address city"),
@@ -360,7 +378,9 @@ DEFAULT_VARIABLES = OrderedDict((
     ("invoice_country", {
         "label": _("Invoice address country"),
         "editor_sample": _("Atlantis"),
-        "evaluate": lambda op, order, ev: str(getattr(order.invoice_address.country, 'name', '')) if getattr(order, 'invoice_address', None) else ''
+        "evaluate": lambda op, order, ev: str(getattr(order.invoice_address.country, 'name', '')) if getattr(order,
+                                                                                                             'invoice_address',
+                                                                                                             None) else ''
     }),
     ("addons", {
         "label": _("List of Add-Ons"),
@@ -524,7 +544,8 @@ def images_from_questions(sender, *args, **kwargs):
         else:
             a = op.answers.filter(question_id=question_id).first() or a
 
-        if not a or not a.file or not any(a.file.name.lower().endswith(e) for e in settings.FILE_UPLOAD_EXTENSIONS_QUESTION_IMAGE):
+        if not a or not a.file or not any(
+                a.file.name.lower().endswith(e) for e in settings.FILE_UPLOAD_EXTENSIONS_QUESTION_IMAGE):
             return None
         else:
             if etag:
@@ -591,7 +612,8 @@ def variables_from_questions(sender, *args, **kwargs):
 def _get_attendee_name_part(key, op, order, ev):
     name_parts = op.attendee_name_parts or (op.addon_to.attendee_name_parts if op.addon_to else {})
     if isinstance(key, tuple):
-        parts = [_get_attendee_name_part(c[0], op, order, ev) for c in key if not (c[0] == 'salutation' and name_parts.get(c[0], '') == "Mx")]
+        parts = [_get_attendee_name_part(c[0], op, order, ev) for c in key if
+                 not (c[0] == 'salutation' and name_parts.get(c[0], '') == "Mx")]
         return ' '.join(p for p in parts if p)
     value = name_parts.get(key, '')
     if key == 'salutation':
@@ -624,7 +646,8 @@ def get_variables(event):
     v['attendee_name_for_salutation'] = {
         'label': _("Attendee name for salutation"),
         'editor_sample': _("Mr Doe"),
-        'evaluate': lambda op, order, ev: concatenation_for_salutation(op.attendee_name_parts or (op.addon_to.attendee_name_parts if op.addon_to else {}))
+        'evaluate': lambda op, order, ev: concatenation_for_salutation(
+            op.attendee_name_parts or (op.addon_to.attendee_name_parts if op.addon_to else {}))
     }
 
     for key, label, weight in scheme['fields']:
@@ -647,7 +670,8 @@ def get_variables(event):
     v['invoice_name_for_salutation'] = {
         'label': _("Invoice address name for salutation"),
         'editor_sample': _("Mr Doe"),
-        'evaluate': lambda op, order, ev: concatenation_for_salutation(order.invoice_address.name_parts if getattr(order, 'invoice_address', None) else {})
+        'evaluate': lambda op, order, ev: concatenation_for_salutation(
+            order.invoice_address.name_parts if getattr(order, 'invoice_address', None) else {})
     }
 
     for key, label, weight in scheme['fields']:

@@ -53,6 +53,8 @@ from pretix.control.forms.widgets import Select2, Select2ItemVarQuota
 from pretix.control.signals import voucher_form_validation
 from pretix.helpers.models import modelcopy
 
+from pretix.base.models import ItemCategory
+
 
 class FakeChoiceField(forms.ChoiceField):
     def valid_value(self, value):
@@ -67,7 +69,17 @@ class VoucherForm(I18nModelForm):
         ),
         required=True
     )
-
+    categories = forms.MultipleChoiceField(
+        label=_("Categories of items to which this voucher should be applicable"),
+        help_text=_("Specify product categories to which this voucher should be applicable. Default: ALL"),
+        required=False
+    )
+    items = forms.MultipleChoiceField(
+        label=_("Items to which this voucher should be applicable"),
+        help_text=_("Specify products to which this voucher should be applicable. Default: ALL. "
+                    "\nNOTE: This take precision over categories"),
+        required=False
+    )
     class Meta:
         model = Voucher
         localized_fields = '__all__'
@@ -87,7 +99,12 @@ class VoucherForm(I18nModelForm):
     def __init__(self, *args, **kwargs):
         instance = kwargs.get('instance')
         initial = kwargs.get('initial')
+        initial_categories = []
+        initial_items = []
         if instance:
+            if instance.id:
+                initial_categories = instance.applicable_to_categories.all() if instance else ItemCategory.objects.none()
+                initial_items = instance.applicable_to_items.all() if instance else Item.objects.none()
             self.initial_instance_data = modelcopy(instance)
             try:
                 if instance.variation:
@@ -101,6 +118,17 @@ class VoucherForm(I18nModelForm):
         else:
             self.initial_instance_data = None
         super().__init__(*args, **kwargs)
+
+        # Set the choices for the categories field with all ItemCategory objects
+        self.fields['categories'].choices = [(category.id, category.name) for category in ItemCategory.objects.all()]
+
+        # Set the choices for the categories field with all Item objects
+        self.fields['items'].choices = [(item.id, item.name) for item in Item.objects.all()]
+
+        # Set the initial values for the categories field if there's an instance with applicable_to categories
+        if instance:
+            self.fields['categories'].initial = [category.id for category in initial_categories]
+            self.fields['items'].initial = [item.id for item in initial_items]
 
         if instance.event.has_subevents:
             self.fields['subevent'].queryset = instance.event.subevents.all()
@@ -246,7 +274,19 @@ class VoucherForm(I18nModelForm):
         return data
 
     def save(self, commit=True):
-        return super().save(commit)
+        voucher = super().save(commit)
+        if commit:
+            voucher.applicable_to_categories.clear()
+            voucher.applicable_to_items.clear()
+        # Add selected categories
+        category_ids = self.cleaned_data.get('categories')
+        voucher.applicable_to_categories.set(category_ids)
+        items_ids = self.cleaned_data.get('items')
+        voucher.applicable_to_items.set(items_ids)
+        if commit:
+            voucher.save()
+
+        return voucher
 
 
 class VoucherBulkForm(VoucherForm):
