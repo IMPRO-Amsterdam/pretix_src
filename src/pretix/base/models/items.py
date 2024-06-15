@@ -336,6 +336,8 @@ class Item(LoggedModel):
     :type min_per_order: int
     :param checkin_attention: Requires special attention at check-in
     :type checkin_attention: bool
+    :param checkin_text: Additional text to show at check-in
+    :type checkin_text: bool
     :param original_price: The item's "original" price. Will not be used for any calculations, will just be shown.
     :type original_price: decimal.Decimal
     :param require_approval: If set to ``True``, orders containing this product can only be processed and paid after approved by an administrator
@@ -566,6 +568,11 @@ class Item(LoggedModel):
                     'attention. You can use this for example for student tickets to indicate to the person at '
                     'check-in that the student ID card still needs to be checked.')
     )
+    checkin_text = models.TextField(
+        verbose_name=_('Check-in text'),
+        null=True, blank=True,
+        help_text=_('This text will be shown by the check-in app if a ticket of this type is scanned.')
+    )
     original_price = models.DecimalField(
         verbose_name=_('Original price'),
         blank=True, null=True,
@@ -624,7 +631,7 @@ class Item(LoggedModel):
         null=True, blank=True, max_length=16,
         verbose_name=_('Validity'),
         help_text=_(
-            'When setting up a regular event, or an event series with time slots, you typically to NOT need to change '
+            'When setting up a regular event, or an event series with time slots, you typically do NOT need to change '
             'this value. The default setting means that the validity time of tickets will not be decided by the '
             'product, but by the event and check-in configuration. Only use the other options if you need them to '
             'realize e.g. a booking of a year-long ticket with a dynamic start date. Note that the validity will be '
@@ -1096,6 +1103,11 @@ class ItemVariation(models.Model):
                     'attention. You can use this for example for student tickets to indicate to the person at '
                     'check-in that the student ID card still needs to be checked.')
     )
+    checkin_text = models.TextField(
+        verbose_name=_('Check-in text'),
+        null=True, blank=True,
+        help_text=_('This text will be shown by the check-in app if a ticket of this type is scanned.')
+    )
 
     objects = ScopedManager(organizer='item__event__organizer')
 
@@ -1450,6 +1462,8 @@ class Question(LoggedModel):
     :param items: A set of ``Items`` objects that this question should be applied to
     :param ask_during_checkin: Whether to ask this question during check-in instead of during check-out.
     :type ask_during_checkin: bool
+    :param show_during_checkin: Whether to show the answer to this question during check-in.
+    :type show_during_checkin: bool
     :param hidden: Whether to only show the question in the backend
     :type hidden: bool
     :param identifier: An arbitrary, internal identifier
@@ -1487,6 +1501,7 @@ class Question(LoggedModel):
     )
     UNLOCALIZED_TYPES = [TYPE_DATE, TYPE_TIME, TYPE_DATETIME]
     ASK_DURING_CHECKIN_UNSUPPORTED = []
+    SHOW_DURING_CHECKIN_UNSUPPORTED = [TYPE_FILE]
 
     event = models.ForeignKey(
         Event,
@@ -1535,6 +1550,11 @@ class Question(LoggedModel):
     )
     ask_during_checkin = models.BooleanField(
         verbose_name=_('Ask during check-in instead of in the ticket buying process'),
+        help_text=_('Not supported by all check-in apps for all question types.'),
+        default=False
+    )
+    show_during_checkin = models.BooleanField(
+        verbose_name=_('Show answer during check-in'),
         help_text=_('Not supported by all check-in apps for all question types.'),
         default=False
     )

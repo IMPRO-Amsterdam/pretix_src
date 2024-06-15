@@ -1380,7 +1380,9 @@ def send_download_reminders(sender, **kwargs):
         download_reminder_sent=False,
         datetime__lte=now() - timedelta(hours=2),
         first_date__gte=today,
-    ).only('pk', 'event_id', 'sales_channel').order_by('event_id')
+    ).only(
+        'pk', 'event_id', 'sales_channel', 'datetime',
+    ).order_by('event_id')
     event_id = None
     days = None
     event = None
@@ -1510,6 +1512,7 @@ class OrderChangeManager:
             "You need to select at least %(min)s items of the product %(product)s.",
             "min"
         ),
+        'max_order_size': gettext_lazy('Orders cannot have more than %(max)s positions.'),
     }
     ItemOperation = namedtuple('ItemOperation', ('position', 'item', 'variation'))
     SubeventOperation = namedtuple('SubeventOperation', ('position', 'subevent'))
@@ -2605,6 +2608,14 @@ class OrderChangeManager:
         self.order.total = total + payment_fee
         self.order.save()
 
+    def _check_order_size(self):
+        if (len(self.order.positions.all()) + len([op for op in self._operations if isinstance(op, self.AddOperation)])) > settings.PRETIX_MAX_ORDER_SIZE:
+            raise OrderError(
+                self.error_messages['max_order_size'] % {
+                    'max': settings.PRETIX_MAX_ORDER_SIZE,
+                }
+            )
+
     def _payment_fee_diff(self):
         total = self.order.total + self._totaldiff
         if self.open_payment:
@@ -2625,14 +2636,37 @@ class OrderChangeManager:
     def _reissue_invoice(self):
         i = self.order.invoices.filter(is_cancellation=False).last()
         if self.reissue_invoice and self._invoice_dirty:
-            if i and not i.refered.exists():
-                self._invoices.append(generate_cancellation(i))
-            if invoice_qualified(self.order) and \
-                (i or
-                 self.event.settings.invoice_generate == 'True' or (
-                     self.open_payment is not None and self.event.settings.invoice_generate == 'paid' and
-                     self.open_payment.payment_provider.requires_invoice_immediately)):
-                self._invoices.append(generate_invoice(self.order))
+            order_now_qualified = invoice_qualified(self.order)
+            invoice_should_be_generated_now = (
+                self.event.settings.invoice_generate == "True" or (
+                    self.event.settings.invoice_generate == "paid" and
+                    self.open_payment is not None and
+                    self.open_payment.payment_provider.requires_invoice_immediately
+                ) or (
+                    self.event.settings.invoice_generate == "paid" and
+                    self.order.status == Order.STATUS_PAID
+                ) or (
+                    # Backwards-compatible behaviour
+                    self.event.settings.invoice_generate not in ("True", "paid") and
+                    i and
+                    not i.canceled
+                )
+            )
+            invoice_should_be_generated_later = not invoice_should_be_generated_now and (
+                self.event.settings.invoice_generate in ("True", "paid")
+            )
+
+            if order_now_qualified:
+                if invoice_should_be_generated_now:
+                    if i and not i.canceled:
+                        self._invoices.append(generate_cancellation(i))
+                    self._invoices.append(generate_invoice(self.order))
+                elif invoice_should_be_generated_later:
+                    self.order.invoice_dirty = True
+                    self.order.save(update_fields=["invoice_dirty"])
+            else:
+                if i and not i.canceled:
+                    self._invoices.append(generate_cancellation(i))
 
     def _check_complete_cancel(self):
         current = self.order.positions.count()
@@ -2722,6 +2756,7 @@ class OrderChangeManager:
 
         # finally, incorporate difference in payment fees
         self._payment_fee_diff()
+        self._check_order_size()
 
         with transaction.atomic():
             locked_instance = Order.objects.select_for_update(of=OF_SELF).get(pk=self.order.pk)

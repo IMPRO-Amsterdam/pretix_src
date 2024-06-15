@@ -24,6 +24,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib import messages
 from django.db import transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.decorators import method_decorator
 from django.utils.timezone import now
@@ -76,7 +77,8 @@ class WaitingView(EventViewMixin, FormView):
         if request.GET.get('iframe', '') == '1' and 'require_cookie' not in request.GET:
             # Widget just opened. Let's to a stupid redirect to check if cookies are disabled
             return redirect(request.get_full_path() + '&require_cookie=true')
-        elif 'require_cookie' in request.GET and settings.SESSION_COOKIE_NAME not in request.COOKIES:
+        elif 'require_cookie' in request.GET and settings.SESSION_COOKIE_NAME not in request.COOKIES and\
+                '__Host-' + settings.SESSION_COOKIE_NAME not in self.request.COOKIES:
             # Cookies are in fact not supported. We can't even display the form, since we can't get CSRF right without
             # cookies.
             r = render(request, 'pretixpresale/event/cookies.html', {
@@ -107,8 +109,11 @@ class WaitingView(EventViewMixin, FormView):
         self.subevent = None
         if request.event.has_subevents:
             if 'subevent' in request.GET:
-                self.subevent = get_object_or_404(SubEvent, event=request.event, pk=request.GET['subevent'],
-                                                  active=True)
+                try:
+                    self.subevent = get_object_or_404(SubEvent, event=request.event, pk=request.GET['subevent'],
+                                                      active=True)
+                except ValueError:
+                    raise Http404()
             else:
                 messages.error(request, pgettext_lazy('subevent', "You need to select a date."))
                 return redirect(self.get_index_url())

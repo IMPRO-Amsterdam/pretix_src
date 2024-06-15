@@ -244,6 +244,11 @@ class Order(LockModel, LoggedModel):
                     'special attention. This will not show any details or custom message, so you need to brief your '
                     'check-in staff how to handle these cases.')
     )
+    checkin_text = models.TextField(
+        verbose_name=_('Check-in text'),
+        null=True, blank=True,
+        help_text=_('This text will be shown by the check-in app if a ticket of this order is scanned.')
+    )
     expiry_reminder_sent = models.BooleanField(
         default=False
     )
@@ -265,6 +270,10 @@ class Order(LockModel, LoggedModel):
     email_known_to_work = models.BooleanField(
         default=False,
         verbose_name=_('E-mail address verified')
+    )
+    invoice_dirty = models.BooleanField(
+        # Invoice needs to be re-issued when the order is paid again
+        default=False,
     )
 
     objects = ScopedManager(organizer='event__organizer')
@@ -324,6 +333,18 @@ class Order(LockModel, LoggedModel):
 
     def email_confirm_hash(self):
         return hashlib.sha256(settings.SECRET_KEY.encode() + self.secret.encode()).hexdigest()[:9]
+
+    def get_extended_status_display(self):
+        # Changes in this method should to be replicated in pretixcontrol/orders/fragment_order_status.html
+        # and pretixpresale/event/fragment_order_status.html
+        if self.status == Order.STATUS_PENDING:
+            if self.require_approval:
+                return _("approval pending")
+            elif self.valid_if_pending:
+                return pgettext_lazy("order state", "pending (confirmed)")
+        elif self.status == Order.STATUS_PAID and self.count_positions == 0:
+            return _("canceled (paid fee)")
+        return self.get_status_display()
 
     @property
     def fees(self):
@@ -1271,6 +1292,21 @@ class QuestionAnswer(models.Model):
         return self.file.name.split('.', 1)[-1]
 
     def __str__(self):
+        return self.to_string(use_cached=True)
+
+    def to_string_i18n(self):
+        return self.to_string(use_cached=False)
+
+    def to_string(self, use_cached=True):
+        """
+        Render this answer as a string.
+
+        :param use_cached: If ``True`` (default), choice and multiple choice questions will show their cached
+                           value, i.e. the value of the selected options at the time of saving and in the language
+                           the answer was saved in. If ``False``, the values will instead be loaded from the
+                           database, yielding current and translated values of the options. However, additional database
+                           queries might be required.
+        """
         if self.question.type == Question.TYPE_BOOLEAN and self.answer == "True":
             return str(_("Yes"))
         elif self.question.type == Question.TYPE_BOOLEAN and self.answer == "False":
@@ -1305,6 +1341,8 @@ class QuestionAnswer(models.Model):
                 return PhoneNumber.from_string(self.answer).as_international
             except NumberParseException:
                 return self.answer
+        elif self.question.type in (Question.TYPE_CHOICE, Question.TYPE_CHOICE_MULTIPLE) and self.answer and not use_cached:
+            return ", ".join(str(o.answer) for o in self.options.all())
         else:
             return self.answer
 
@@ -1806,7 +1844,7 @@ class OrderPayment(models.Model):
     def _mark_order_paid(self, count_waitinglist=True, send_mail=True, force=False, user=None, auth=None, mail_text='',
                          ignore_date=False, lock=True, payment_refund_sum=0, allow_generate_invoice=True):
         from pretix.base.services.invoices import (
-            generate_invoice, invoice_qualified,
+            generate_cancellation, generate_invoice, invoice_qualified,
         )
         from pretix.base.services.locking import LOCK_TRUST_WINDOW
 
@@ -1824,9 +1862,14 @@ class OrderPayment(models.Model):
             cancellations = self.order.invoices.filter(is_cancellation=True).count()
             gen_invoice = (
                 (invoices == 0 and self.order.event.settings.get('invoice_generate') in ('True', 'paid')) or
-                0 < invoices <= cancellations
+                0 < invoices <= cancellations or
+                self.order.invoice_dirty
             )
             if gen_invoice:
+                if invoices:
+                    last_i = self.order.invoices.filter(is_cancellation=False).last()
+                    if not last_i.canceled:
+                        generate_cancellation(last_i)
                 invoice = generate_invoice(
                     self.order,
                     trigger_pdf=not send_mail or not self.order.event.settings.invoice_email_attachment
@@ -2100,6 +2143,12 @@ class OrderRefund(models.Model):
             self.local_id = (self.order.refunds.aggregate(m=Max('local_id'))['m'] or 0) + 1
             if 'update_fields' in kwargs:
                 kwargs['update_fields'] = {'local_id'}.union(kwargs['update_fields'])
+
+        if self.state == OrderRefund.REFUND_STATE_DONE and not self.execution_date:
+            self.execution_date = now()
+            if 'update_fields' in kwargs:
+                kwargs['update_fields'] = {'execution_date'}.union(kwargs['update_fields'])
+
         super().save(*args, **kwargs)
 
 
@@ -2386,6 +2435,17 @@ class OrderPosition(AbstractPosition):
         if self.order.checkin_attention or self.item.checkin_attention or (self.variation_id and self.variation.checkin_attention):
             return True
         return False
+
+    @cached_property
+    def checkin_texts(self):
+        texts = []
+        if self.order.checkin_text:
+            texts.append(self.order.checkin_text)
+        if self.variation_id and self.variation.checkin_text:
+            texts.append(self.variation.checkin_text)
+        if self.item.checkin_text:
+            texts.append(self.item.checkin_text)
+        return texts
 
     @property
     def checkins(self):

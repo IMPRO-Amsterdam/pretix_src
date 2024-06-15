@@ -32,6 +32,7 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations under the License.
 
+import csv
 import logging
 from datetime import timedelta
 
@@ -49,6 +50,7 @@ from pretix.base.services.orderimport import import_orders, parse_csv
 from pretix.base.views.tasks import AsyncAction
 from pretix.control.forms.orderimport import ProcessForm
 from pretix.control.permissions import EventPermissionRequiredMixin
+from pretix.helpers.http import redirect_to_url
 
 logger = logging.getLogger(__name__)
 ENCODINGS = (
@@ -68,19 +70,19 @@ class ImportView(EventPermissionRequiredMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         if 'file' not in request.FILES:
-            return redirect(reverse('control:event.orders.import', kwargs={
+            return redirect_to_url(reverse('control:event.orders.import', kwargs={
                 'event': request.event.slug,
                 'organizer': request.organizer.slug,
             }))
         if not request.FILES['file'].name.lower().endswith('.csv'):
             messages.error(request, _('Please only upload CSV files.'))
-            return redirect(reverse('control:event.orders.import', kwargs={
+            return redirect_to_url(reverse('control:event.orders.import', kwargs={
                 'event': request.event.slug,
                 'organizer': request.organizer.slug,
             }))
         if request.FILES['file'].size > settings.FILE_UPLOAD_MAX_SIZE_OTHER:
             messages.error(request, _('Please do not upload files larger than 10 MB.'))
-            return redirect(reverse('control:event.orders.import', kwargs={
+            return redirect_to_url(reverse('control:event.orders.import', kwargs={
                 'event': request.event.slug,
                 'organizer': request.organizer.slug,
             }))
@@ -157,6 +159,14 @@ class ProcessView(EventPermissionRequiredMixin, AsyncAction, FormView):
             )
             return parse_csv(self.file.file, 1024 * 1024, "replace", charset=charset)
 
+    @cached_property
+    def parsed_list(self):
+        try:
+            return list(self.parsed)
+        except csv.Error:
+            logger.exception("Could not parse full CSV file")
+            return None
+
     def get(self, request, *args, **kwargs):
         if 'async_id' in request.GET and settings.HAS_CELERY:
             return self.get_result(request)
@@ -174,7 +184,7 @@ class ProcessView(EventPermissionRequiredMixin, AsyncAction, FormView):
     def dispatch(self, request, *args, **kwargs):
         if 'async_id' in request.GET and settings.HAS_CELERY:
             return self.get_result(request)
-        if not self.parsed:
+        if not self.parsed or not self.parsed_list:
             messages.error(request, _('We\'ve been unable to parse the uploaded file as a CSV file.'))
             return redirect(reverse('control:event.orders.import', kwargs={
                 'event': request.event.slug,
@@ -193,5 +203,5 @@ class ProcessView(EventPermissionRequiredMixin, AsyncAction, FormView):
         ctx = super().get_context_data(**kwargs)
         ctx['file'] = self.file
         ctx['parsed'] = self.parsed
-        ctx['sample_rows'] = list(self.parsed)[:3]
+        ctx['sample_rows'] = self.parsed_list[:3]
         return ctx

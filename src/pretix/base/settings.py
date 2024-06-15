@@ -306,9 +306,11 @@ DEFAULTS = {
         'serializer_class': serializers.IntegerField,
         'serializer_kwargs': dict(
             min_value=1,
+            max_value=settings.PRETIX_MAX_ORDER_SIZE,
         ),
         'form_kwargs': dict(
             min_value=1,
+            max_value=settings.PRETIX_MAX_ORDER_SIZE,
             required=True,
             label=_("Maximum number of items per order"),
             help_text=_("Add-on products will not be counted.")
@@ -1606,6 +1608,16 @@ DEFAULTS = {
             help_text=_('If your event series has more than 50 dates in the future, only the month or week calendar can be used.')
         ),
     },
+    'event_list_filters': {
+        'default': 'True',
+        'type': bool,
+        'form_class': forms.BooleanField,
+        'serializer_class': serializers.BooleanField,
+        'form_kwargs': dict(
+            label=_("Show filter options for calendar or list view"),
+            help_text=_("You can set up possible filters as meta properties in your organizer settings.")
+        )
+    },
     'event_list_available_only': {
         'default': 'False',
         'type': bool,
@@ -1924,6 +1936,32 @@ DEFAULTS = {
         'serializer_class': SerializerRelativeDateTimeField,
         'form_kwargs': dict(
             label=_("Do not allow cancellations after"),
+        )
+    },
+    'cancel_terms_paid': {
+        'default': None,
+        'type': LazyI18nString,
+        'serializer_class': I18nField,
+        'form_class': I18nFormField,
+        'form_kwargs': dict(
+            label=_("Terms of cancellation"),
+            widget=I18nTextarea,
+            widget_kwargs={'attrs': {'rows': '2'}},
+            help_text=_("This text will be shown when cancellation is allowed for a paid order. Leave empty if you "
+                        "want pretix to automatically generate the terms of cancellation based on your settings.")
+        )
+    },
+    'cancel_terms_unpaid': {
+        'default': None,
+        'type': LazyI18nString,
+        'serializer_class': I18nField,
+        'form_class': I18nFormField,
+        'form_kwargs': dict(
+            label=_("Terms of cancellation"),
+            widget=I18nTextarea,
+            widget_kwargs={'attrs': {'rows': '2'}},
+            help_text=_("This text will be shown when cancellation is allowed for an unpaid or free order. Leave empty "
+                        "if you want pretix to automatically generate the terms of cancellation based on your settings.")
         )
     },
     'contact_mail': {
@@ -2874,6 +2912,25 @@ Your {organizer} team"""))  # noqa: W291
             label=_('Use header image also for events without an individually uploaded logo'),
         )
     },
+    'favicon': {
+        'default': None,
+        'type': File,
+        'form_class': ExtFileField,
+        'form_kwargs': dict(
+            label=_('Favicon'),
+            ext_whitelist=settings.FILE_UPLOAD_EXTENSIONS_FAVICON,
+            max_size=settings.FILE_UPLOAD_MAX_SIZE_FAVICON,
+            help_text=_('If you provide a favicon, we will show it instead of the default pretix icon. '
+                        'We recommend a size of at least 200x200px to accommodate most devices.')
+        ),
+        'serializer_class': UploadedFileField,
+        'serializer_kwargs': dict(
+            allowed_types=[
+                'image/png', 'image/jpeg', 'image/gif', 'image/x-icon', 'image/vnd.microsoft.icon',
+            ],
+            max_size=settings.FILE_UPLOAD_MAX_SIZE_FAVICON,
+        )
+    },
     'og_image': {
         'default': None,
         'type': File,
@@ -3172,6 +3229,12 @@ Your {organizer} team"""))  # noqa: W291
             label=_('Length of gift card codes'),
             help_text=_('The system generates by default {}-character long gift card codes. However, if a different length '
                         'is required, it can be set here.'.format(settings.ENTROPY['giftcard_secret'])),
+            min_value=6,
+            max_value=64,
+        ),
+        'serializer_kwargs': dict(
+            min_value=6,
+            max_value=64,
         )
     },
     'giftcard_expiry_years': {
@@ -3600,7 +3663,7 @@ COUNTRIES_WITH_STATE_IN_ADDRESS = {
     'BR': (['State'], 'short'),
     'CA': (['Province', 'Territory'], 'short'),
     # 'CN': (['Province', 'Autonomous region', 'Munincipality'], 'long'),
-    'MY': (['State'], 'long'),
+    'MY': (['State', 'Federal territory'], 'long'),
     'MX': (['State', 'Federal district'], 'short'),
     'US': (['State', 'Outlying area', 'District'], 'short'),
 }

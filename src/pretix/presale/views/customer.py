@@ -35,7 +35,7 @@ from django.db.models import (
     Count, IntegerField, OuterRef, Prefetch, Q, Subquery,
 )
 from django.http import Http404, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.utils.crypto import get_random_string
 from django.utils.decorators import method_decorator
 from django.utils.functional import cached_property
@@ -343,7 +343,7 @@ class CustomerRequiredMixin:
         if not request.organizer.settings.customer_accounts:
             raise Http404('Feature not enabled')
         if not getattr(request, 'customer', None):
-            return redirect(
+            return redirect_to_url(
                 eventreverse(self.request.organizer, 'presale:organizer.customer.login', kwargs={}) +
                 '?next=' + quote(self.request.path_info + '?' + self.request.GET.urlencode())
             )
@@ -400,7 +400,7 @@ class ProfileView(CustomerRequiredMixin, ListView):
         for o in ctx['orders']:
             if o.pk not in annotated:
                 continue
-            o.count_positions = annotated.get(o.pk)['pcnt']
+            o.pcnt = annotated.get(o.pk)['pcnt']
         return ctx
 
 
@@ -826,6 +826,8 @@ class SSOLoginReturnView(RedirectBackMixin, View):
                 popup_origin
             )
 
+        customer_signed_in.send(customer.organizer, customer=customer)
+
         if popup_origin:
             return render(self.request, 'pretixpresale/postmessage.html', {
                 'message': {
@@ -839,7 +841,6 @@ class SSOLoginReturnView(RedirectBackMixin, View):
             })
         else:
             customer_login(self.request, customer)
-            customer_signed_in.send(customer.organizer, customer=customer)
             return redirect_to_url(self.get_success_url(redirect_to))
 
     def _fail(self, message, popup_origin):
@@ -848,7 +849,7 @@ class SSOLoginReturnView(RedirectBackMixin, View):
                 self.request,
                 message,
             )
-            return redirect(eventreverse(self.request.organizer, 'presale:organizer.customer.login', kwargs={}))
+            return redirect_to_url(eventreverse(self.request.organizer, 'presale:organizer.customer.login', kwargs={}))
         else:
             return render(self.request, 'pretixpresale/postmessage.html', {
                 'message': {

@@ -222,6 +222,8 @@ class OrderViewSetMixin:
             qs = qs.prefetch_related('refunds', 'refunds__payment')
         if 'invoice_address' not in self.request.GET.getlist('exclude'):
             qs = qs.select_related('invoice_address')
+        if 'customer' not in self.request.GET.getlist('exclude'):
+            qs = qs.select_related('customer')
 
         qs = qs.prefetch_related(self._positions_prefetch(self.request))
         return qs
@@ -825,6 +827,16 @@ class EventOrderViewSet(OrderViewSetMixin, viewsets.ModelViewSet):
                     auth=self.request.auth,
                     data={
                         'new_value': self.request.data.get('checkin_attention')
+                    }
+                )
+
+            if 'checkin_text' in self.request.data and serializer.instance.checkin_text != self.request.data.get('checkin_text'):
+                serializer.instance.log_action(
+                    'pretix.event.order.checkin_text',
+                    user=self.request.user,
+                    auth=self.request.auth,
+                    data={
+                        'new_value': self.request.data.get('checkin_text')
                     }
                 )
 

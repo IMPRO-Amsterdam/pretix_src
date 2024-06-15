@@ -133,6 +133,14 @@ class QuestionForm(I18nModelForm):
 
         return val
 
+    def clean_show_during_checkin(self):
+        val = self.cleaned_data.get('show_during_checkin')
+
+        if val and self.cleaned_data.get('type') in Question.SHOW_DURING_CHECKIN_UNSUPPORTED:
+            raise ValidationError(_('This type of question cannot be shown during check-in.'))
+
+        return val
+
     def clean_identifier(self):
         val = self.cleaned_data.get('identifier')
         Question._clean_identifier(self.instance.event, val, self.instance)
@@ -155,6 +163,7 @@ class QuestionForm(I18nModelForm):
             'type',
             'required',
             'ask_during_checkin',
+            'show_during_checkin',
             'hidden',
             'identifier',
             'items',
@@ -379,6 +388,7 @@ class ItemCreateForm(I18nModelForm):
                 'max_per_order',
                 'generate_tickets',
                 'checkin_attention',
+                'checkin_text',
                 'free_price',
                 'original_price',
                 'sales_channels',
@@ -604,6 +614,15 @@ class ItemUpdateForm(I18nModelForm):
 
         self.fields['free_price_suggestion'].widget.attrs['data-display-dependency'] = '#id_free_price'
 
+        self.fields['validity_dynamic_start_choice'] = forms.TypedChoiceField(
+            label=_("Start of validity"),
+            choices=(
+                ("False", _("Purchase date")),
+                ("True", _("Date chosen by customer")),
+            ),
+            coerce=lambda x: x == 'True',
+        )
+
         qs = self.event.organizer.membership_types.all()
         if qs:
             self.fields['require_membership_types'].queryset = qs
@@ -651,7 +670,7 @@ class ItemUpdateForm(I18nModelForm):
         if d.get('grant_membership_type'):
             if not d['grant_membership_type'].transferable and not d['personalized']:
                 self.add_error(
-                    'personalized' if d['admission'] else 'admission',
+                    'personalized' if d.get('admission') else 'admission',
                     _("Your product grants a non-transferable membership and should therefore be a personalized "
                       "admission ticket. Otherwise customers might not be able to use the membership later. If you "
                       "want the membership to be non-personalized, set the membership type to be transferable.")
@@ -703,6 +722,7 @@ class ItemUpdateForm(I18nModelForm):
             'max_per_order',
             'min_per_order',
             'checkin_attention',
+            'checkin_text',
             'generate_tickets',
             'original_price',
             'require_bundling',
@@ -751,6 +771,7 @@ class ItemUpdateForm(I18nModelForm):
             'show_quota_left': ShowQuotaNullBooleanSelect(),
             'max_per_order': forms.widgets.NumberInput(attrs={'min': 0}),
             'min_per_order': forms.widgets.NumberInput(attrs={'min': 0}),
+            'checkin_text': forms.TextInput(),
         }
 
 
@@ -869,6 +890,7 @@ class ItemVariationForm(I18nModelForm):
             'require_membership_hidden',
             'require_membership_types',
             'checkin_attention',
+            'checkin_text',
             'available_from',
             'available_until',
             'sales_channels',
@@ -884,6 +906,7 @@ class ItemVariationForm(I18nModelForm):
             'require_membership_types': forms.CheckboxSelectMultiple(attrs={
                 'class': 'scrolling-multiple-choice'
             }),
+            'checkin_text': forms.TextInput(),
         }
 
     def clean(self):

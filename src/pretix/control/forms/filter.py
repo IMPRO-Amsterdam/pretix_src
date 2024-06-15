@@ -57,7 +57,7 @@ from pretix.base.forms.widgets import (
 from pretix.base.models import (
     Checkin, CheckinList, Device, Event, EventMetaProperty, EventMetaValue,
     Gate, Invoice, InvoiceAddress, Item, Order, OrderPayment, OrderPosition,
-    OrderRefund, Organizer, Question, QuestionAnswer, SubEvent,
+    OrderRefund, Organizer, Question, QuestionAnswer, Quota, SubEvent,
     SubEventMetaValue, Team, TeamAPIToken, TeamInvite, Voucher,
 )
 from pretix.base.signals import register_payment_providers
@@ -230,6 +230,7 @@ class OrderFilterForm(FilterForm):
                 ('partially_paid', _('Partially paid')),
                 ('underpaid', _('Underpaid (but confirmed)')),
                 ('pendingpaid', _('Pending (but fully paid)')),
+                ('pendingnopayment', _('Pending (but no current payment)')),
             )),
             (_('Approval process'), (
                 ('na', _('Approved, payment pending')),
@@ -326,6 +327,18 @@ class OrderFilterForm(FilterForm):
                 qs = qs.filter(
                     Q(status__in=(Order.STATUS_EXPIRED, Order.STATUS_PENDING)) & Q(pending_sum_t__lte=0)
                     & Q(require_approval=False)
+                )
+            elif s == 'pendingnopayment':
+                qs = qs.exclude(
+                    Exists(
+                        OrderPayment.objects.filter(
+                            order=OuterRef('pk'),
+                            state__in=(OrderPayment.PAYMENT_STATE_CREATED, OrderPayment.PAYMENT_STATE_PENDING)
+                        )
+                    )
+                ).filter(
+                    status=Order.STATUS_PENDING,
+                    require_approval=False,
                 )
             elif s == 'partially_paid':
                 qs = Order.annotate_overpayments(qs, refunds=False, results=False, sums=True)
@@ -578,11 +591,10 @@ class EventOrderExpertFilterForm(EventOrderFilterForm):
         widget=FilterNullBooleanSelect,
         label=_('At least one ticket with check-in'),
     )
-    checkin_attention = forms.NullBooleanField(
+    quota = SafeModelChoiceField(
+        queryset=Quota.objects.none(),
+        label=_('Affected quota'),
         required=False,
-        widget=FilterNullBooleanSelect,
-        label=_('Requires special attention'),
-        help_text=_('Only matches orders with the attention checkbox set directly for the order, not based on the product.'),
     )
 
     def __init__(self, *args, **kwargs):
@@ -667,6 +679,17 @@ class EventOrderExpertFilterForm(EventOrderFilterForm):
             label=_('Ticket secret'),
             required=False
         )
+        self.fields['quota'].queryset = self.event.quotas.all()
+        self.fields['quota'].widget = Select2(
+            attrs={
+                'data-model-select2': 'generic',
+                'data-select2-url': reverse('control:event.items.quotas.select2', kwargs={
+                    'event': self.event.slug,
+                    'organizer': self.event.organizer.slug,
+                }),
+            }
+        )
+        self.fields['quota'].widget.choices = self.fields['quota'].choices
         for q in self.event.questions.all():
             self.fields['question_{}'.format(q.pk)] = forms.CharField(
                 label=q.question,
@@ -759,6 +782,12 @@ class EventOrderExpertFilterForm(EventOrderFilterForm):
         if fdata.get('ticket_secret'):
             qs = qs.filter(
                 all_positions__secret__icontains=fdata.get('ticket_secret')
+            ).distinct()
+        if fdata.get('quota'):
+            quota = fdata['quota']
+            qs = qs.filter(
+                Q(all_positions__item__in=quota.items.all(), all_positions__variation__isnull=True) |
+                Q(all_positions__variation__in=quota.variations.all())
             ).distinct()
         for q in self.event.questions.all():
             if fdata.get(f'question_{q.pk}'):
@@ -1599,6 +1628,20 @@ class EventFilterForm(FilterForm):
         }),
         required=False
     )
+    date_from = forms.DateField(
+        label=_('Date from'),
+        required=False,
+        widget=DatePickerWidget({
+            'placeholder': _('Date from'),
+        }),
+    )
+    date_until = forms.DateField(
+        label=_('Date until'),
+        required=False,
+        widget=DatePickerWidget({
+            'placeholder': _('Date until'),
+        }),
+    )
 
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop('request')
@@ -1679,6 +1722,22 @@ class EventFilterForm(FilterForm):
             qs = qs.filter(
                 Q(name__icontains=i18ncomp(query)) | Q(slug__icontains=query)
             )
+
+        if fdata.get('date_until'):
+            date_end = make_aware(datetime.combine(
+                fdata.get('date_until') + timedelta(days=1),
+                time(hour=0, minute=0, second=0, microsecond=0)
+            ), get_current_timezone())
+            qs = qs.filter(
+                Q(date_to__isnull=True, date_from__lt=date_end) |
+                Q(date_to__isnull=False, date_to__lt=date_end)
+            )
+        if fdata.get('date_from'):
+            date_start = make_aware(datetime.combine(
+                fdata.get('date_from'),
+                time(hour=0, minute=0, second=0, microsecond=0)
+            ), get_current_timezone())
+            qs = qs.filter(date_from__gte=date_start)
 
         filters_by_property_name = {}
         for i, p in enumerate(self.meta_properties):

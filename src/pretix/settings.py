@@ -41,6 +41,7 @@ from json import loads
 from urllib.parse import urlparse
 
 import importlib_metadata as metadata
+from django.core.exceptions import ImproperlyConfigured
 from django.utils.crypto import get_random_string
 from kombu import Queue
 
@@ -334,8 +335,6 @@ if HAS_CELERY:
 else:
     CELERY_TASK_ALWAYS_EAGER = True
 
-SESSION_COOKIE_DOMAIN = config.get('pretix', 'cookie_domain', fallback=None)
-
 CACHE_TICKETS_HOURS = config.getint('cache', 'tickets', fallback=24 * 3)
 
 ENTROPY = {
@@ -399,7 +398,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'pretix.api.auth.token.TeamTokenAuthentication',
         'pretix.api.auth.device.DeviceTokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'pretix.api.auth.session.SessionAuthentication',
         'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
     ),
     'DEFAULT_RENDERER_CLASSES': (
@@ -494,6 +493,11 @@ for k, v in ALL_LANGUAGES: # noqa
     if LANGUAGES_ENABLED and k not in LANGUAGES_ENABLED:
         continue
     LANGUAGES.append((k, v))
+
+if LANGUAGE_CODE not in {l[0] for l in LANGUAGES}:
+    raise ImproperlyConfigured(
+        f"Default language {LANGUAGE_CODE} is not one of the available and enabled languages."
+    )
 
 
 AUTH_USER_MODEL = 'pretixbase.User'

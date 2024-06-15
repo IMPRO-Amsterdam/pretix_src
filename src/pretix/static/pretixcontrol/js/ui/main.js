@@ -105,7 +105,7 @@ $(document).ajaxError(function (event, jqXHR, settings, thrownError) {
     } else if (c.length > 0) {
         ajaxErrDialog.show(c.first().html());
     } else if (thrownError !== "abort" && thrownError !== "") {
-        console.log(thrownError);
+        console.error(event, jqXHR, settings, thrownError);
         alert(gettext('Unknown error.'));
     }
 });
@@ -322,13 +322,21 @@ var form_handlers = function (el) {
         }
     });
 
+    function findDependency(searchString, sourceElement) {
+        if (searchString.substr(0, 1) === '<') {
+            return $(sourceElement).closest("form, .form-horizontal").find(searchString.substr(1));
+        } else {
+            return $(searchString);
+        }
+    }
+
     el.find("input[data-checkbox-dependency]").each(function () {
         var dependent = $(this),
-            dependency = $($(this).attr("data-checkbox-dependency")),
+            dependency = findDependency($(this).attr("data-checkbox-dependency"), this),
             update = function () {
                 var enabled = dependency.prop('checked');
                 dependent.prop('disabled', !enabled).closest('.form-group, .form-field-boundary').toggleClass('disabled', !enabled);
-                if (!enabled && !$(this).is('[data-checkbox-dependency-visual]')) {
+                if (!enabled && !dependent.is('[data-checkbox-dependency-visual]')) {
                     dependent.prop('checked', false);
                 }
             };
@@ -337,14 +345,8 @@ var form_handlers = function (el) {
     });
 
     el.find("select[data-inverse-dependency], input[data-inverse-dependency]").each(function () {
-        var dependency = $(this).attr("data-inverse-dependency");
-        if (dependency.substr(0, 1) === '<') {
-            dependency = $(this).closest("form, .form-horizontal").find(dependency.substr(1));
-        } else {
-            dependency = $(dependency);
-        }
-
         var dependent = $(this),
+            dependency = findDependency($(this).attr("data-inverse-dependency"), this),
             update = function () {
                 var enabled = !dependency.prop('checked');
                 dependent.prop('disabled', !enabled).closest('.form-group, .form-field-boundary').toggleClass('disabled', !enabled);
@@ -355,14 +357,17 @@ var form_handlers = function (el) {
 
     el.find("div[data-display-dependency], textarea[data-display-dependency], input[data-display-dependency], select[data-display-dependency]").each(function () {
         var dependent = $(this),
-            dependency = $($(this).attr("data-display-dependency")),
+            dependency = findDependency($(this).attr("data-display-dependency"), this),
             update = function (ev) {
                 var enabled = dependency.toArray().some(function(d) {
                     if (d.type === 'checkbox' || d.type === 'radio') {
                         return d.checked;
                     } else if (d.type === 'select-one') {
-                        if (dependent.attr("data-display-dependency-value")) {
-                            return d.value === dependent.attr("data-display-dependency-value");
+                        var checkValue;
+                        if ((checkValue = /^\/(.*)\/$/.exec(dependent.attr("data-display-dependency-regex")))) {
+                            return new RegExp(checkValue[1]).test(d.value);
+                        } else if ((checkValue = dependent.attr("data-display-dependency-value"))) {
+                            return d.value === checkValue;
                         } else {
                             return !!d.value
                         }
@@ -769,6 +774,19 @@ function setup_basics(el) {
             span: [],
             strong: [],
             u: [],
+        }
+    });
+
+    el.find('a.pagination-selection').click(function (e) {
+        e.preventDefault();
+        var max = parseInt($(this).data("max"))
+        var inp = prompt(gettext("Enter page number between 1 and %(max)s.").replace("%(max)s", max));
+        if (inp) {
+            if (!parseInt(inp) || parseInt(inp) < 1 || parseInt(inp) > max) {
+                alert(gettext("Invalid page number."));
+            } else {
+                location.href = $(this).attr("data-href").replace("_PAGE_", inp);
+            }
         }
     });
 

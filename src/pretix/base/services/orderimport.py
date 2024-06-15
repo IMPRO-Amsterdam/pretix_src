@@ -23,6 +23,7 @@ import csv
 import io
 from decimal import Decimal
 
+from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.timezone import now
@@ -91,7 +92,15 @@ def import_orders(event: Event, fileid: str, settings: dict, locale: str, user, 
     user = User.objects.get(pk=user)
     with language(locale, event.settings.region):
         cols = get_all_columns(event)
-        parsed = parse_csv(cf.file, charset=charset)
+        try:
+            parsed = parse_csv(cf.file, charset=charset)
+        except UnicodeDecodeError as e:
+            raise DataImportError(
+                _(
+                    'Error decoding special characters in your file: {message}').format(
+                    message=str(e)
+                )
+            )
         orders = []
         order = None
         data = []
@@ -115,6 +124,11 @@ def import_orders(event: Event, fileid: str, settings: dict, locale: str, user, 
                         )
                     )
             data.append(values)
+
+        if settings['orders'] == 'one' and len(data) > django_settings.PRETIX_MAX_ORDER_SIZE:
+            raise DataImportError(
+                _('Orders cannot have more than %(max)s positions.') % {'max': django_settings.PRETIX_MAX_ORDER_SIZE}
+            )
 
         # Prepare model objects. Yes, this might consume lots of RAM, but allows us to make the actual SQL transaction
         # shorter. We'll see what works better in reality…

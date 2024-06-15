@@ -86,6 +86,7 @@ from pretix.base.signals import (
 from pretix.base.templatetags.money import money_filter
 from pretix.base.views.mixins import OrderQuestionsViewMixin
 from pretix.base.views.tasks import AsyncAction
+from pretix.helpers.http import redirect_to_url
 from pretix.helpers.safedownload import check_token
 from pretix.multidomain.urlreverse import build_absolute_uri, eventreverse
 from pretix.presale.forms.checkout import InvoiceAddressForm, QuestionsForm
@@ -420,9 +421,9 @@ class OrderPaymentStart(EventViewMixin, OrderDetailMixin, TemplateView):
         if 'payment_change_{}'.format(self.order.pk) in request.session:
             del request.session['payment_change_{}'.format(self.order.pk)]
         if isinstance(resp, str):
-            return redirect(resp)
+            return redirect_to_url(resp)
         elif resp is True:
-            return redirect(self.get_confirm_url())
+            return redirect_to_url(self.get_confirm_url())
         else:
             return self.get(request, *args, **kwargs)
 
@@ -487,9 +488,13 @@ class OrderPaymentConfirm(EventViewMixin, OrderDetailMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         try:
-            if not self.order.invoices.exists() and invoice_qualified(self.order):
+            i = self.order.invoices.filter(is_cancellation=False).last()
+            has_active_invoice = i and not i.canceled
+            if (not has_active_invoice or self.order.invoice_dirty) and invoice_qualified(self.order):
                 if self.request.event.settings.get('invoice_generate') == 'True' or (
                         self.request.event.settings.get('invoice_generate') == 'paid' and self.payment.payment_provider.requires_invoice_immediately):
+                    if has_active_invoice:
+                        generate_cancellation(i)
                     i = generate_invoice(self.order)
                     self.order.log_action('pretix.event.order.invoice.generated', data={
                         'invoice': i.pk
@@ -570,9 +575,9 @@ class OrderPaymentComplete(EventViewMixin, OrderDetailMixin, View):
             return redirect(self.get_order_url())
 
         if self.order.status == Order.STATUS_PAID:
-            return redirect(resp or self.get_order_url() + '?paid=yes')
+            return redirect_to_url(resp or self.get_order_url() + '?paid=yes')
         else:
-            return redirect(resp or self.get_order_url() + '?thanks=yes')
+            return redirect_to_url(resp or self.get_order_url() + '?thanks=yes')
 
     def get_payment_url(self):
         return eventreverse(self.request.event, 'presale:event.order.pay', kwargs={
@@ -672,7 +677,7 @@ class OrderPayChangeMethod(EventViewMixin, OrderDetailMixin, TemplateView):
     def provider_forms(self):
         providers = []
         pending_sum = self.order.pending_sum
-        for provider in self.request.event.get_payment_providers().values():
+        for provider in sorted(self.request.event.get_payment_providers().values(), key=lambda p: (-p.priority, str(p.public_name).title())):
             if not provider.is_enabled:
                 continue
 

@@ -109,7 +109,7 @@ LANGUAGES_RTL = {
     'ar', 'hw'
 }
 LANGUAGES_INCUBATING = {
-    'pl', 'fi', 'pt-br', 'gl',
+    'fi', 'pt-br', 'gl',
 }
 LOCALE_PATHS = [
     os.path.join(os.path.dirname(__file__), 'locale'),
@@ -267,9 +267,10 @@ CACHE_LARGE_VALUES_ALIAS = 'default'
 FILE_UPLOAD_EXTENSIONS_IMAGE = (".png", ".jpg", ".gif", ".jpeg")
 PILLOW_FORMATS_IMAGE = ('PNG', 'GIF', 'JPEG')
 
-FILE_UPLOAD_EXTENSIONS_FAVICON = (".ico", ".png", "jpg", ".gif", ".jpeg")
+FILE_UPLOAD_EXTENSIONS_FAVICON = (".ico", ".png", ".jpg", ".gif", ".jpeg")
+PILLOW_FORMATS_QUESTIONS_FAVICON = ('PNG', 'GIF', 'JPEG', 'ICO')
 
-FILE_UPLOAD_EXTENSIONS_QUESTION_IMAGE = (".png", "jpg", ".gif", ".jpeg", ".bmp", ".tif", ".tiff", ".jfif")
+FILE_UPLOAD_EXTENSIONS_QUESTION_IMAGE = (".png", ".jpg", ".gif", ".jpeg", ".bmp", ".tif", ".tiff", ".jfif")
 PILLOW_FORMATS_QUESTIONS_IMAGE = ('PNG', 'GIF', 'JPEG', 'BMP', 'TIFF')
 
 FILE_UPLOAD_EXTENSIONS_EMAIL_ATTACHMENT = (
@@ -278,3 +279,5 @@ FILE_UPLOAD_EXTENSIONS_EMAIL_ATTACHMENT = (
     ".bmp", ".tif", ".tiff"
 )
 FILE_UPLOAD_EXTENSIONS_OTHER = FILE_UPLOAD_EXTENSIONS_EMAIL_ATTACHMENT
+
+PRETIX_MAX_ORDER_SIZE = 500

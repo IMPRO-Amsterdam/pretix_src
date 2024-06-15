@@ -49,7 +49,7 @@ from django.db.models import (
     Count, Exists, IntegerField, OuterRef, Prefetch, Q, Value,
 )
 from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.utils.decorators import method_decorator
 from django.utils.formats import get_format
 from django.utils.functional import SimpleLazyObject
@@ -78,6 +78,7 @@ from pretix.presale.views.organizer import (
 )
 
 from ...helpers.formats.en.formats import SHORT_MONTH_DAY_FORMAT, WEEK_FORMAT
+from ...helpers.http import redirect_to_url
 from . import (
     CartMixin, EventViewMixin, allow_frame_if_namespaced, get_cart,
     iframe_entry_view_wrapper,
@@ -334,12 +335,14 @@ def get_grouped_items(event, subevent=None, voucher=None, channel='web', require
             original_price = item_price_override.get(item.pk, item.default_price)
             if voucher:
                 price = voucher.calculate_price(original_price, item=item)
+                include_bundled = not voucher.all_bundles_included
             else:
                 price = original_price
+                include_bundled = True
 
-            item.display_price = item.tax(price, currency=event.currency, include_bundled=True)
+            item.display_price = item.tax(price, currency=event.currency, include_bundled=include_bundled)
             if item.free_price and item.free_price_suggestion is not None:
-                item.suggested_price = item.tax(max(price, item.free_price_suggestion), currency=event.currency, include_bundled=True)
+                item.suggested_price = item.tax(max(price, item.free_price_suggestion), currency=event.currency, include_bundled=include_bundled)
             else:
                 item.suggested_price = item.display_price
 
@@ -383,17 +386,19 @@ def get_grouped_items(event, subevent=None, voucher=None, channel='web', require
                 original_price = var_price_override.get(var.pk, var.price)
                 if voucher:
                     price = voucher.calculate_price(original_price, item=var)
+                    include_bundled = not voucher.all_bundles_included
                 else:
                     price = original_price
+                    include_bundled = True
 
-                var.display_price = var.tax(price, currency=event.currency, include_bundled=True)
+                var.display_price = var.tax(price, currency=event.currency, include_bundled=include_bundled)
 
                 if item.free_price and var.free_price_suggestion is not None:
                     var.suggested_price = item.tax(max(price, var.free_price_suggestion), currency=event.currency,
-                                                   include_bundled=True)
+                                                   include_bundled=include_bundled)
                 elif item.free_price and item.free_price_suggestion is not None:
                     var.suggested_price = item.tax(max(price, item.free_price_suggestion), currency=event.currency,
-                                                   include_bundled=True)
+                                                   include_bundled=include_bundled)
                 else:
                     var.suggested_price = var.display_price
 
@@ -456,14 +461,14 @@ class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
         if all(k in request.GET for k in keys):
             get_params = {k: v for k, v in request.GET.items() if k not in keys}
             get_params["date"] = "%s-%s" % (request.GET.get("year"), request.GET.get("month"))
-            return redirect(self.request.path + "?" + urlencode(get_params))
+            return redirect_to_url(self.request.path + "?" + urlencode(get_params))
 
         # redirect old week-year-URLs to new date-URLs
         keys = ("week", "year")
         if all(k in request.GET for k in keys):
             get_params = {k: v for k, v in request.GET.items() if k not in keys}
             get_params["date"] = "%s-W%s" % (request.GET.get("year"), request.GET.get("week"))
-            return redirect(self.request.path + "?" + urlencode(get_params))
+            return redirect_to_url(self.request.path + "?" + urlencode(get_params))
 
         from pretix.presale.views.cart import get_or_create_cart_id
 
@@ -471,11 +476,11 @@ class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
         if request.GET.get('src', '') == 'widget' and 'take_cart_id' in request.GET:
             # User has clicked "Open in a new tab" link in widget
             get_or_create_cart_id(request)
-            return redirect(eventreverse(request.event, 'presale:event.index', kwargs=kwargs))
+            return redirect_to_url(eventreverse(request.event, 'presale:event.index', kwargs=kwargs))
         elif request.GET.get('iframe', '') == '1' and 'take_cart_id' in request.GET:
             # Widget just opened, a cart already exists. Let's to a stupid redirect to check if cookies are disabled
             get_or_create_cart_id(request)
-            return redirect(eventreverse(request.event, 'presale:event.index', kwargs=kwargs) + '?' + urllib.parse.urlencode({
+            return redirect_to_url(eventreverse(request.event, 'presale:event.index', kwargs=kwargs) + '?' + urllib.parse.urlencode({
                 'require_cookie': 'true',
                 'cart_id': request.GET.get('take_cart_id'),
                 **({"locale": request.GET.get('locale')} if request.GET.get('locale') else {}),
@@ -483,7 +488,8 @@ class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
         elif request.GET.get('iframe', '') == '1' and len(self.request.GET.get('widget_data', '{}')) > 3:
             # We've been passed data from a widget, we need to create a cart session to store it.
             get_or_create_cart_id(request)
-        elif 'require_cookie' in request.GET and settings.SESSION_COOKIE_NAME not in request.COOKIES:
+        elif 'require_cookie' in request.GET and settings.SESSION_COOKIE_NAME not in request.COOKIES and \
+                '__Host-' + settings.SESSION_COOKIE_NAME not in self.request.COOKIES:
             # Cookies are in fact not supported
             r = render(request, 'pretixpresale/event/cookies.html', {
                 'url': eventreverse(
@@ -510,7 +516,7 @@ class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
                 return super().get(request, *args, **kwargs)
         else:
             if 'subevent' in kwargs:
-                return redirect(self.get_index_url())
+                return redirect_to_url(self.get_index_url())
             else:
                 return super().get(request, *args, **kwargs)
 
@@ -673,6 +679,7 @@ class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
                 timeout=120,
             )
             context['weeks'] = weeks_for_template(ebd, self.year, self.month, future_only=self.request.event.settings.event_calendar_future_only)
+            context['weeks'] = weeks_for_template(ebd, self.year, self.month, future_only=self.request.event.settings.event_calendar_future_only)
             context['months'] = [date(self.year, i + 1, 1) for i in range(12)]
             if self.request.event.settings.event_calendar_future_only:
                 context['years'] = range(now().year, now().year + 3)
@@ -787,11 +794,11 @@ class SeatingPlanView(EventViewMixin, TemplateView):
         if request.GET.get('src', '') == 'widget' and 'take_cart_id' in request.GET:
             # User has clicked "Open in a new tab" link in widget
             get_or_create_cart_id(request)
-            return redirect(eventreverse(request.event, 'presale:event.seatingplan', kwargs=kwargs))
+            return redirect_to_url(eventreverse(request.event, 'presale:event.seatingplan', kwargs=kwargs))
         elif request.GET.get('iframe', '') == '1' and 'take_cart_id' in request.GET:
             # Widget just opened, a cart already exists. Let's to a stupid redirect to check if cookies are disabled
             get_or_create_cart_id(request)
-            return redirect(eventreverse(request.event, 'presale:event.seatingplan', kwargs=kwargs) + '?require_cookie=true&cart_id={}'.format(
+            return redirect_to_url(eventreverse(request.event, 'presale:event.seatingplan', kwargs=kwargs) + '?require_cookie=true&cart_id={}'.format(
                 request.GET.get('take_cart_id')
             ))
         elif request.GET.get('iframe', '') == '1' and len(self.request.GET.get('widget_data', '{}')) > 3:
@@ -890,4 +897,4 @@ class EventAuth(View):
                 raise PermissionDenied(_('Please go back and try again.'))
 
         request.session['pretix_event_access_{}'.format(request.event.pk)] = parent
-        return redirect(eventreverse(request.event, 'presale:event.index'))
+        return redirect_to_url(eventreverse(request.event, 'presale:event.index'))

@@ -183,6 +183,7 @@ def mail(email: Union[str, Sequence[str]], subject: str, template: Union[str, La
     if auto_email:
         headers['X-Auto-Response-Suppress'] = 'OOF, NRN, AutoReply, RN'
         headers['Auto-Submitted'] = 'auto-generated'
+    headers.setdefault('X-Mailer', 'pretix')
 
     with language(locale):
         if isinstance(context, dict) and event:
@@ -573,8 +574,11 @@ def mail_send_task(self, *args, to: List[str], subject: str, body: str, html: st
         except smtplib.SMTPRecipientsRefused as e:
             smtp_codes = [a[0] for a in e.recipients.values()]
 
-            if not any(c >= 500 for c in smtp_codes):
-                # Not a permanent failure (mailbox full, service unavailable), retry later, but with large intervals
+            if not any(c >= 500 for c in smtp_codes) or any(b'Message is too large' in a[1] for a in e.recipients.values()):
+                # This is not a permanent failure (mailbox full, service unavailable), retry later, but with large
+                # intervals. One would think that "Message is too lage" is a permanent failure, but apparently it is not.
+                # We have documented cases of emails to Microsoft returning the error occasionally and then later
+                # allowing the very same email.
                 try:
                     self.retry(max_retries=5, countdown=[60, 300, 600, 1200, 1800, 1800][self.request.retries])
                 except MaxRetriesExceededError:
