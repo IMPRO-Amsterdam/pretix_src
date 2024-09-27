@@ -586,7 +586,7 @@ class Voucher(LoggedModel):
         if self.value is not None:
             if item is None:
                 return original_price
-            if isinstance(item, ItemVariation):
+            if isinstance(item, ItemVariation) or isinstance(item, Item):
                 item_category_name = str(item.item.category)
             else:
                 item_category_name = str(item.category.name)
