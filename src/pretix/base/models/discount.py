@@ -23,7 +23,7 @@
 from collections import defaultdict
 from decimal import Decimal
 from itertools import groupby
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -35,6 +35,10 @@ from django_scopes import ScopedManager
 from pretix.base.decimal import round_decimal
 from pretix.base.models import fields
 from pretix.base.models.base import LoggedModel
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Discount(LoggedModel):
@@ -242,7 +246,8 @@ class Discount(LoggedModel):
         return True
 
     def _apply_min_value(self, positions, condition_idx_group, benefit_idx_group, result):
-        if self.condition_min_value and sum(positions[idx][2] for idx in condition_idx_group) < self.condition_min_value:
+        if self.condition_min_value and sum(
+                positions[idx][2] for idx in condition_idx_group) < self.condition_min_value:
             return
 
         if self.condition_min_count or self.benefit_only_apply_to_cheapest_n_matches:
@@ -290,7 +295,10 @@ class Discount(LoggedModel):
         for idx in consume_idx:
             result.setdefault(idx, positions[idx][2])
 
-    def apply(self, positions: Dict[int, Tuple[int, Optional[int], Decimal, bool, Decimal]]) -> Dict[int, Decimal]:
+    def apply(self,
+              positions: Dict[int, Tuple[int, Optional[int], Decimal, bool, Decimal, str]],
+              item_categories_names: List[str],
+              ) -> Dict[int, Decimal]:
         """
         Tries to apply this discount to a cart
 
@@ -307,6 +315,14 @@ class Discount(LoggedModel):
         if not self.active:
             return result
 
+        if self.internal_name == "FESTIVAL_PASS_DISCOUNT":
+            try:
+                item_categories_names.index("Festival pass")
+            except ValueError as e:
+                logger.error(e)
+                logger.error(item_categories_names)
+                return result
+
         limit_products = set()
         if not self.condition_all_products:
             limit_products = {p.pk for p in self.condition_limit_products.all()}
@@ -314,11 +330,13 @@ class Discount(LoggedModel):
         # First, filter out everything not even covered by our product scope
         condition_candidates = [
             idx
-            for idx, (item_id, subevent_id, line_price_gross, is_addon_to, voucher_discount) in positions.items()
+            for idx, (item_id, subevent_id, line_price_gross, is_addon_to, voucher_discount, item_category_name) in
+            positions.items()
             if (
-                (self.condition_all_products or item_id in limit_products) and
-                (self.condition_apply_to_addons or not is_addon_to) and
-                (not self.condition_ignore_voucher_discounted or voucher_discount is None or voucher_discount == Decimal('0.00'))
+                    (_is_valid_category_for_festival_pass_discount(item_category_name)) and
+                    (self.condition_all_products or item_id in limit_products) and
+                    (self.condition_apply_to_addons or not is_addon_to) and
+                    (not self.condition_ignore_voucher_discounted or voucher_discount is None or voucher_discount == Decimal('0.00'))
             )
         ]
 
@@ -431,3 +449,12 @@ class Discount(LoggedModel):
                     result
                 )
         return result
+
+
+def _is_valid_category_for_festival_pass_discount(item_category_name):
+    if not item_category_name:
+        return False
+    for valid_category in ["workshop", "show"]:
+        if valid_category in item_category_name.lower():
+            return True
+    return False

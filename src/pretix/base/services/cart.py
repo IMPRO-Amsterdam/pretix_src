@@ -80,6 +80,8 @@ from pretix.presale.signals import (
 )
 from pretix.testutils.middleware import debugflags_var
 
+import logging
+logger = logging.getLogger(__name__)
 
 class CartError(Exception):
     def __init__(self, *args):
@@ -1372,12 +1374,14 @@ class CartManager:
             self.event,
             self._sales_channel,
             [
-                (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher)
+                (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher, cp.item.category.internal_name if cp.item.category is not None else "")
                 for cp in positions
-            ]
+            ],
+            [cp.item.category.internal_name if cp.item.category is not None else "" for cp in positions]
         )
-
         for cp, (new_price, discount) in zip(positions, discount_results):
+            if new_price is None and discount is None:
+                continue
             if cp.price != new_price or cp.discount_id != (discount.pk if discount else None):
                 diff += new_price - cp.price
                 cp.price = new_price

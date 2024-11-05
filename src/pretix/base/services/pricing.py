@@ -34,6 +34,9 @@ from pretix.base.models import (
 from pretix.base.models.event import Event, SubEvent
 from pretix.base.models.tax import TAXED_ZERO, TaxedPrice, TaxRule
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_price(item: Item, variation: ItemVariation = None,
               voucher: Voucher = None, custom_price: Decimal = None,
@@ -155,7 +158,9 @@ def get_line_price(price_after_voucher: Decimal, custom_price_input: Decimal, cu
 
 
 def apply_discounts(event: Event, sales_channel: str,
-                    positions: List[Tuple[int, Optional[int], Decimal, bool, bool]]) -> List[Decimal]:
+                    positions: List[Tuple[int, Optional[int], Decimal, bool, bool, Decimal, str]],
+                    item_category_names: List[str],
+                    ) -> List[Decimal]:
     """
     Applies any dynamic discounts to a cart
 
@@ -174,10 +179,10 @@ def apply_discounts(event: Event, sales_channel: str,
     ).prefetch_related('condition_limit_products', 'benefit_limit_products').order_by('position', 'pk')
     for discount in discount_qs:
         result = discount.apply({
-            idx: (item_id, subevent_id, line_price_gross, is_addon_to, voucher_discount)
-            for idx, (item_id, subevent_id, line_price_gross, is_addon_to, is_bundled, voucher_discount) in enumerate(positions)
+            idx: (item_id, subevent_id, line_price_gross, is_addon_to, voucher_discount,  item_category_name)
+            for idx, (item_id, subevent_id, line_price_gross, is_addon_to, is_bundled, voucher_discount, item_category_name) in enumerate(positions)
             if not is_bundled and idx not in new_prices
-        })
+        }, item_category_names)
         for k in result.keys():
             result[k] = (result[k], discount)
         new_prices.update(result)
