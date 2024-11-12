@@ -159,7 +159,7 @@ def get_line_price(price_after_voucher: Decimal, custom_price_input: Decimal, cu
 
 def apply_discounts(event: Event, sales_channel: str,
                     positions: List[Tuple[int, Optional[int], Decimal, bool, bool, Decimal, str]],
-                    item_category_names: List[str],
+                    item_category_names: List[str] = None,
                     ) -> List[Decimal]:
     """
     Applies any dynamic discounts to a cart

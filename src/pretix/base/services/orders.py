@@ -867,11 +867,14 @@ def _check_positions(event: Event, now_dt: datetime, positions: List[CartPositio
         event,
         sales_channel,
         [
-            (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher)
+            (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher,  cp.item.category.internal_name if cp.item.category is not None else "")
             for cp in sorted_positions
-        ]
+        ],
+        [cp.item.category.internal_name if cp.item.category is not None else "" for cp in sorted_positions]
     )
     for cp, (new_price, discount) in zip(sorted_positions, discount_results):
+        if new_price is None and discount is None:
+            continue
         if cp.price != new_price or cp.discount_id != (discount.pk if discount else None):
             cp.price = new_price
             cp.discount = discount
