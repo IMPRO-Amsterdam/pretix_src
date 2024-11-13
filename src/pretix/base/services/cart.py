@@ -1374,10 +1374,10 @@ class CartManager:
             self.event,
             self._sales_channel,
             [
-                (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher, cp.item.category.internal_name if cp.item.category is not None else "")
+                (cp.item_id, cp.subevent_id, cp.line_price_gross, bool(cp.addon_to), cp.is_bundled, cp.listed_price - cp.price_after_voucher, str(cp.item.category.name) if cp.item.category is not None else "")
                 for cp in positions
             ],
-            [cp.item.category.internal_name if cp.item.category is not None else "" for cp in positions]
+            [str(cp.item.category.name) if cp.item.category is not None else "" for cp in positions]
         )
         for cp, (new_price, discount) in zip(positions, discount_results):
             if new_price is None and discount is None:

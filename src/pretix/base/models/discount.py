@@ -319,8 +319,8 @@ class Discount(LoggedModel):
             try:
                 item_categories_names.index("Festival pass")
             except ValueError as e:
-                logger.error(e)
-                logger.error(item_categories_names)
+                logger.info(e)
+                logger.info("Categories names: '{}'".format(item_categories_names))
                 return result
 
         limit_products = set()

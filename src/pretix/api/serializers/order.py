@@ -1457,10 +1457,10 @@ class OrderCreateSerializer(I18nAwareModelSerializer):
             self.context['event'],
             order.sales_channel,
             [
-                (cp.item_id, cp.subevent_id, cp.price, bool(cp.addon_to), cp.is_bundled, pos._voucher_discount, cp.item.category.internal_name if cp.item.category is not None else "")
+                (cp.item_id, cp.subevent_id, cp.price, bool(cp.addon_to), cp.is_bundled, pos._voucher_discount, str(cp.item.category.name) if cp.item.category is not None else "")
                 for cp in order_positions
             ],
-            [cp.item.category.internal_name if cp.item.category is not None else "" for cp in order_positions]
+            [str(cp.item.category.name) if cp.item.category is not None else "" for cp in order_positions]
         )
         for cp, (new_price, discount) in zip(order_positions, discount_results):
             if new_price is None and discount is None:
