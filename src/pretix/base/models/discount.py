@@ -317,7 +317,7 @@ class Discount(LoggedModel):
 
         if self.internal_name == "FESTIVAL_PASS_DISCOUNT":
             try:
-                item_categories_names.index("Festival pass")
+                [item.lower() for item in item_categories_names].index("festival pass")
             except ValueError as e:
                 logger.info(e)
                 logger.info("Categories names: '{}'".format(item_categories_names))
