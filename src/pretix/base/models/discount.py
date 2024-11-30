@@ -458,3 +458,9 @@ def _is_valid_category_for_festival_pass_discount(item_category_name):
         if valid_category in item_category_name.lower():
             return True
     return False
+
+
+def _was_applied_once(applied_once, item_id):
+    was_applied = applied_once.get(item_id)
+    applied_once.setdefault(item_id, True)
+    return was_applied
