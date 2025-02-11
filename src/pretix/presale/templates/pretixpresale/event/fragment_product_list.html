@@ -6,9 +6,11 @@
 {% load eventsignal %}
 {% load rich_text %}
 {% for tup in items_by_category %}
-    <section {% if tup.0 %}aria-labelledby="category-{{ tup.0.id }}"{% else %}aria-label="{% trans "Uncategorized items" %}"{% endif %}{% if tup.0.description %} aria-describedby="category-info-{{ tup.0.id }}"{% endif %}>
+    <section {% if tup.0 %}aria-labelledby="category-{{ tup.0.id }}" id="{{tup.0.name|slugify}}" {% else %}aria-label="{% trans "Uncategorized items" %}"{% endif %}{% if tup.0.description %} aria-describedby="category-info-{{ tup.0.id }}"{% endif %}>
         {% if tup.0 %}
-            <h3 id="category-{{ tup.0.id }}">{{ tup.0.name }}</h3>
+           <!-- REMOVE HARDCODED URL AND USE  eventurl tag correctly-->
+
+           <a href="https://tickets.impro-amsterdam.nl/festival/2025#{{tup.0.name|slugify}}"><h3 id="category-{{ tup.0.id }}">{{ tup.0.name }}</h3></a>
             {% if tup.0.description %}
                 <div id="category-info-{{ tup.0.id }}">{{ tup.0.description|localize|rich_text }}</div>
             {% endif %}
